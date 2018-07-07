@@ -95,10 +95,12 @@ impl V {
     }
 
     pub fn norm(self) -> V {
+        let distance = self.dot(self).sqrt();
+
         V {
-            x: self.x / self.dot(self).sqrt(),
-            y: self.y / self.dot(self).sqrt(),
-            z: self.z / self.dot(self).sqrt(),
+            x: self.x / distance,
+            y: self.y / distance,
+            z: self.z / distance,
         }
     }
 }
