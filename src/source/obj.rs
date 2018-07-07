@@ -141,7 +141,7 @@ impl Scene {
                     1e5,
                     vector::V {
                         x: 0.3,
-                        y: 0.9,
+                        y: 0.7,
                         z: 0.3,
                     },
                     vector::V {
@@ -161,7 +161,7 @@ impl Scene {
                     vector::V {
                         x: 0.3,
                         y: 0.3,
-                        z: 0.9,
+                        z: 0.7,
                     },
                     vector::V {
                         x: 0.0,
@@ -252,7 +252,7 @@ impl Scene {
                     },
                     16.5,
                     vector::V {
-                        x: 0.0,
+                        x: 0.7,
                         y: 0.9,
                         z: 0.9,
                     },

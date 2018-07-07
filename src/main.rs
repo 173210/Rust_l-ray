@@ -17,7 +17,7 @@ const HEIGHT: usize = 800;
 const MAX: usize = 255;
 
 // pixelあたりのサンプル数（よく解ってない）
-const SPP: u32 = 10;
+const SPP: u32 = 100;
 
 // スレッドの数
 const WORKS: usize = 10;
@@ -83,12 +83,11 @@ fn main() {
 					let mut write_push = V::new();
 
 					for j in 0..SPP as usize {
-						let random_f64 = random::<f64>();
-
 						// rayの値
 						ray.o = eye;
 						// 目の位置
 						{
+							let random_f64 = random::<f64>();
 							let rpx = 2.0 * (x as f64 + random_f64) / wid - 1.0;
 							let rpy = 2.0 * (y as f64 + random_f64) / hei - 1.0;
 							let w: V = V::norm(V {
@@ -103,7 +102,7 @@ fn main() {
 						let mut ill_l = V::new_sig(0.0);
 						let mut refl_l = V::new_sig(1.0) ;
 
-						for depth in 0..10 {
+						for depth in 0..2 {
 							let h: Option<obj::Hit> = scene.intersect(&ray, 1e-4, 1e+10);
 
 							if let Some(s) = h {
@@ -123,7 +122,7 @@ fn main() {
 									let d: V = {
 										let r = random::<f64>();
 										let r_sqrt = r.sqrt();
-										let t = 2.0 * PI * random_f64;
+										let t = 2.0 * PI * random::<f64>();
 										V {
 											x: r_sqrt * t.cos(),
 											y: r_sqrt * t.sin(),
