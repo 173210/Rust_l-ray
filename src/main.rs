@@ -7,10 +7,6 @@ use std::fs::File;
 use std::io::*;
 // PIに使った
 
-// スレッドに使う
-use std::sync::mpsc::*;
-use threadpool::ThreadPool;
-
 use rand::random;
 
 use l_ray::source::{ vector::*, *};
@@ -23,7 +19,7 @@ const MAX: usize = 255;
 // pixelあたりのサンプル数（よく解ってない）
 const SPP: u32 = 10;
 
-// poolの数
+// スレッドの数
 const WORKS: usize = 10;
 
 fn main() {
@@ -60,9 +56,8 @@ fn main() {
 	let VE: V = V::cross(WE, UE);
 	// WEとUEに垂直な単位ベクトル（双方正規化されてるため正規化の必要なし）
 
-	// Thread Pool
-	let pool = ThreadPool::new(WORKS);
-	let mut recs: Vec<Receiver<V>> = Vec::with_capacity(all);
+	// Threads
+	let mut threads: Vec<std::thread::JoinHandle<Vec<V>>> = Vec::with_capacity(WORKS);
 
 	// scene 初期化
 	//let scene = obj::Scene::new_mul();
@@ -71,101 +66,93 @@ fn main() {
 	// 書き込み用
 	let iter: V = V::new();
 	// let mut iter: [u32; 3] = [0, 0, 0];
-	let mut write_v: Vec<V> = Vec::with_capacity(all);
 
-	for i in 0..all {
+	for work in 0..WORKS {
 		let scene = scene.clone();
 		let mut iter = iter.clone();
-		let (sen, rec) = sync_channel(SPP as usize);
-		recs.push(rec);
 
-		pool.execute(move || {
-			for j in 0..SPP as usize {
-				let x = (i % WIDTH) as f64;
-				let y = (HEIGHT - (i / WIDTH)) as f64;
+		threads.push(std::thread::spawn(move || {
+			let bottom = all * work / WORKS;
+			let top = all * (work + 1) / WORKS;
+			let mut write_v: Vec<V> = Vec::with_capacity(top - bottom);
 
-				let mut ray = obj::Ray::new();
+			for i in bottom..top {
+				let mut write_push = V::new();
 
-				// rayの値
-				ray.o = eye;
-				// 目の位置
-				{
-					let tf = (fov * 0.5).tan();
-					let rpx = 2.0 * (x + random::<f64>()) / wid - 1.0;
-					let rpy = 2.0 * (y + random::<f64>()) / hei - 1.0;
-					let w: V = V::norm(V {
-						x: aspect * tf * rpx,
-						y: tf * rpy,
-						z: -1.0,
-					});
-					ray.d = UE * V::new_sig(w.x) + VE * V::new_sig(w.y) + WE * V::new_sig(w.z);
-				// 目線の向き
-				}
+				for j in 0..SPP as usize {
+					let x = (i % WIDTH) as f64;
+					let y = (HEIGHT - (i / WIDTH)) as f64;
 
-				let mut ill_l = V::new_sig(0.0);
-				let mut refl_l = V::new_sig(1.0) ;
+					let mut ray = obj::Ray::new();
 
-				for depth in 0..10 {
-					let h: Option<obj::Hit> = scene.intersect(&ray, 1e-4, 1e+10);
+					// rayの値
+					ray.o = eye;
+					// 目の位置
+					{
+						let tf = (fov * 0.5).tan();
+						let rpx = 2.0 * (x + random::<f64>()) / wid - 1.0;
+						let rpy = 2.0 * (y + random::<f64>()) / hei - 1.0;
+						let w: V = V::norm(V {
+							x: aspect * tf * rpx,
+							y: tf * rpy,
+							z: -1.0,
+						});
+						ray.d = UE * V::new_sig(w.x) + VE * V::new_sig(w.y) + WE * V::new_sig(w.z);
+					// 目線の向き
+					}
 
-					if let Some(s) = h {
-					// 球にレイが当たった時
+					let mut ill_l = V::new_sig(0.0);
+					let mut refl_l = V::new_sig(1.0) ;
 
-						// 光度更新
-						ill_l = ill_l + refl_l * s.sphere.ill;
+					for depth in 0..10 {
+						let h: Option<obj::Hit> = scene.intersect(&ray, 1e-4, 1e+10);
 
-						// 球上の交点をレイの原点にする
-						ray.o = s.p;
-						// レイの方向
-						ray.d = {
-							// nが法線、u,vがそれに直交するベクトル。
-							// nから直交単位ベクトルを生成してる
-       						let n = if V::dot(s.n, -ray.d) > 0.0 { s.n } else { -s.n };
-							let (u, v) = tangent_space(n);
-							let d: V = {
-								let r = random::<f64>().sqrt();
-								let t = 2.0 * PI * random::<f64>();
-								let x = r * t.cos();
-								let y = r * t.sin();
-								V {
-									x: x,
-									y: y,
-									z: 0.0_f64.max(1.0 - x * x - y * y).sqrt(),
-								}
+						if let Some(s) = h {
+						// 球にレイが当たった時
+
+							// 光度更新
+							ill_l = ill_l + refl_l * s.sphere.ill;
+
+							// 球上の交点をレイの原点にする
+							ray.o = s.p;
+							// レイの方向
+							ray.d = {
+								// nが法線、u,vがそれに直交するベクトル。
+								// nから直交単位ベクトルを生成してる
+       							let n = if V::dot(s.n, -ray.d) > 0.0 { s.n } else { -s.n };
+								let (u, v) = tangent_space(n);
+								let d: V = {
+									let r = random::<f64>().sqrt();
+									let t = 2.0 * PI * random::<f64>();
+									let x = r * t.cos();
+									let y = r * t.sin();
+									V {
+										x: x,
+										y: y,
+										z: 0.0_f64.max(1.0 - x * x - y * y).sqrt(),
+									}
+								};
+								u * V::new_sig(d.x) + v * V::new_sig(d.y) + n * V::new_sig(d.z)
 							};
-							u * V::new_sig(d.x) + v * V::new_sig(d.y) + n * V::new_sig(d.z)
-						};
-						refl_l = refl_l * s.sphere.refl;
-					} else {
-					// 当たらなかったらループから抜ける
-						break;
-					}
+							refl_l = refl_l * s.sphere.refl;
+						} else {
+						// 当たらなかったらループから抜ける
+							break;
+						}
 
-					if refl_l.x.max(refl_l.y.max(refl_l.z)) == 0.0 {
-					// if ill_l * ill_l.y * ill_l.z == 0.0 {
-						break;
+						if refl_l.x.max(refl_l.y.max(refl_l.z)) == 0.0 {
+						// if ill_l * ill_l.y * ill_l.z == 0.0 {
+							break;
+						}
 					}
+					write_push = write_push + ill_l / V::new_sig(SPP as f64);
 				}
-				sen.send(ill_l).expect("failed send iter");
+
+				write_v.push(write_push);
 			}
-		});
-	}
 
-	for i in 0..all {
-		let mut write_push = V::new();
-
-		for j in 0..SPP as usize {
-			let rec_l = recs[i].recv().unwrap();
-			write_push = write_push + rec_l / V::new_sig(SPP as f64);
-
-			if i % 10000 == 0 {
-				println!("done: {}/960000", i);
-				println!("{:?}", write_push);
-				// println!("{:?}", rec_l/ V::new_sig(SPP as f64));
-			}
-		}
-
-		write_v.push(write_push);
+			write_v
+		}));
 	}
 
 	let tonemap = |v: f64| {
@@ -179,11 +166,13 @@ fn main() {
 	file.write_all(format!("P3\n{} {}\n{}\n", WIDTH, HEIGHT, 255).as_bytes())
 		.unwrap();
 
-	for n in write_v {
-		file.write_all(format!("{} {} {}\n",
-							   tonemap(n.x),
-							   tonemap(n.y),
-							   tonemap(n.z)).as_bytes()).unwrap();
+	for thread in threads {
+		for n in thread.join().unwrap() {
+			file.write_all(format!("{} {} {}\n",
+								   tonemap(n.x),
+								   tonemap(n.y),
+								   tonemap(n.z)).as_bytes()).unwrap();
+		}
 	}
 }
 
