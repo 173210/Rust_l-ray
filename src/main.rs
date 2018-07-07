@@ -62,7 +62,7 @@ fn main() {
 
 	// Thread Pool
 	let pool = ThreadPool::new(WORKS);
-	let (sen, rec) = channel();
+	let mut recs: Vec<Receiver<V>> = Vec::with_capacity(all);
 
 	// scene 初期化
 	//let scene = obj::Scene::new_mul();
@@ -74,13 +74,13 @@ fn main() {
 	let mut write_v: Vec<V> = Vec::with_capacity(all);
 
 	for i in 0..all {
-		let mut write_push = V::new();
-		for j in 0..SPP as usize {
-			let scene = scene.clone();
-			let mut iter = iter.clone();
-			let sen = sen.clone();
+		let scene = scene.clone();
+		let mut iter = iter.clone();
+		let (sen, rec) = sync_channel(SPP as usize);
+		recs.push(rec);
 
-			pool.execute(move || {
+		pool.execute(move || {
+			for j in 0..SPP as usize {
 				let x = (i % WIDTH) as f64;
 				let y = (HEIGHT - (i / WIDTH)) as f64;
 
@@ -147,20 +147,26 @@ fn main() {
 					}
 				}
 				sen.send(ill_l).expect("failed send iter");
-			});
-		// 何を更新しているかわからない
-		let rec_l = rec.recv().unwrap();
-		write_push = write_push + rec_l / V::new_sig(SPP as f64);
-		}
-		write_v.push(write_push);
-
-		if i % 10000 == 0 {
-			println!("done: {}/960000", i);
-			println!("{:?}", write_push);
-			// println!("{:?}", rec_l/ V::new_sig(SPP as f64));
-		}
+			}
+		});
 	}
-	pool.join();
+
+	for i in 0..all {
+		let mut write_push = V::new();
+
+		for j in 0..SPP as usize {
+			let rec_l = recs[i].recv().unwrap();
+			write_push = write_push + rec_l / V::new_sig(SPP as f64);
+
+			if i % 10000 == 0 {
+				println!("done: {}/960000", i);
+				println!("{:?}", write_push);
+				// println!("{:?}", rec_l/ V::new_sig(SPP as f64));
+			}
+		}
+
+		write_v.push(write_push);
+	}
 
 	let tonemap = |v: f64| {
 		use std::cmp::*;
