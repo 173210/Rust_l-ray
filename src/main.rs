@@ -80,6 +80,8 @@ fn main() {
 		recs.push(rec);
 
 		pool.execute(move || {
+			let mut write_push = V::new();
+
 			for j in 0..SPP as usize {
 				let x = (i % WIDTH) as f64;
 				let y = (HEIGHT - (i / WIDTH)) as f64;
@@ -146,26 +148,12 @@ fn main() {
 						break;
 					}
 				}
-				sen.send(ill_l).expect("failed send iter");
+
+				write_push = write_push + ill_l / V::new_sig(SPP as f64);
 			}
+
+			sen.send(write_push).expect("failed send iter");
 		});
-	}
-
-	for i in 0..all {
-		let mut write_push = V::new();
-
-		for j in 0..SPP as usize {
-			let rec_l = recs[i].recv().unwrap();
-			write_push = write_push + rec_l / V::new_sig(SPP as f64);
-
-			if i % 10000 == 0 {
-				println!("done: {}/960000", i);
-				println!("{:?}", write_push);
-				// println!("{:?}", rec_l/ V::new_sig(SPP as f64));
-			}
-		}
-
-		write_v.push(write_push);
 	}
 
 	let tonemap = |v: f64| {
@@ -179,7 +167,8 @@ fn main() {
 	file.write_all(format!("P3\n{} {}\n{}\n", WIDTH, HEIGHT, 255).as_bytes())
 		.unwrap();
 
-	for n in write_v {
+	for rec in recs {
+		let n = rec.recv().unwrap();
 		file.write_all(format!("{} {} {}\n",
 							   tonemap(n.x),
 							   tonemap(n.y),
